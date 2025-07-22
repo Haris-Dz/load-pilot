@@ -1,12 +1,7 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:hive/hive.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:load_pilot/models/load.dart';
-import 'package:load_pilot/repositories/load_repository.dart';
-import 'package:load_pilot/screens/dialogs/add_load_dialog.dart';
-import 'package:load_pilot/screens/dialogs/edit_load_dialog.dart';
 
 class LoadListScreen extends StatefulWidget {
   const LoadListScreen({super.key});
@@ -16,96 +11,90 @@ class LoadListScreen extends StatefulWidget {
 }
 
 class _LoadListScreenState extends State<LoadListScreen> {
-  late final LoadRepository repo;
-  Timer? _alertTimer;
+  late Box<Load> box;
+  final List<Color> statusColors = [
+    Colors.green,
+    Colors.yellow,
+    Colors.red,
+    Colors.blueGrey,
+  ];
 
   @override
   void initState() {
     super.initState();
-    final box = Hive.box<Load>('loads');
-    repo = LoadRepository(box);
-    repo.checkPickupAlerts();
-    _alertTimer = Timer.periodic(const Duration(minutes: 1), (_) {
-      repo.checkPickupAlerts();
-    });
+    box = Hive.box<Load>('loads');
   }
 
-  @override
-  void dispose() {
-    _alertTimer?.cancel();
-    super.dispose();
-  }
+  void _addNewLoad() {
+    final truckNumberController = TextEditingController();
+    final notesController = TextEditingController();
 
-  Future<void> _onAddLoad() async {
-    await showDialog(
+    showDialog(
       context: context,
       builder:
-          (_) => AddLoadDialog(
-            onSave: (load) async {
-              await _addLoadAndCloseDialog(load);
-            },
+          (_) => AlertDialog(
+            title: const Text("Add New Truck"),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: truckNumberController,
+                    decoration: const InputDecoration(
+                      labelText: 'Truck Number',
+                      hintText: 'Enter truck number',
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: notesController,
+                    decoration: const InputDecoration(
+                      labelText: 'Notes',
+                      hintText: 'Enter notes here',
+                    ),
+                    maxLines: 3,
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  truckNumberController.dispose();
+                  notesController.dispose();
+                  Navigator.pop(context);
+                },
+                child: const Text("Cancel"),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  final truckNumber = truckNumberController.text.trim();
+                  final notes = notesController.text.trim();
+                  if (truckNumber.isNotEmpty) {
+                    final newLoad = Load(
+                      truckNumber: truckNumber,
+                      notes: notes,
+                    );
+                    await box.add(newLoad);
+                  }
+                  truckNumberController.dispose();
+                  notesController.dispose();
+                  Navigator.pop(context);
+                },
+                child: const Text("Add"),
+              ),
+            ],
           ),
     );
   }
 
-  Future<void> _onEditLoad(Load load) async {
-    await showDialog(
-      context: context,
-      builder:
-          (_) => EditLoadDialog(
-            load: load,
-            onSave: (updatedLoad) async {
-              await _saveLoadAndCloseDialog(updatedLoad);
-            },
-          ),
-    );
-  }
-
-  Future<void> _addLoadAndCloseDialog(Load load) async {
-    try {
-      await repo.add(load);
-      if (mounted) {
-        setState(() {});
-        Navigator.of(context).pop();
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error adding load: $e')));
-    }
-  }
-
-  Future<void> _saveLoadAndCloseDialog(Load load) async {
-    try {
-      await repo.save(load);
-      if (mounted) {
-        setState(() {});
-        Navigator.of(context).pop();
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error saving load: $e')));
-    }
-  }
-
-  void _onDeleteLoad(Load load) async {
-    try {
-      await repo.delete(load);
-    } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error deleting load: $e')));
-    }
-  }
-
-  void _onEditNotes(Load load) {
+  void _editNotes(Load load) {
     final controller = TextEditingController(text: load.notes ?? '');
     showDialog(
       context: context,
       builder:
           (_) => AlertDialog(
-            title: Text('Notes for ${load.driverName}'),
+            title: Text('Notes for ${load.truckNumber}'),
             content: TextField(
               controller: controller,
               maxLines: 5,
@@ -113,18 +102,14 @@ class _LoadListScreenState extends State<LoadListScreen> {
             ),
             actions: [
               TextButton(
-                onPressed: () {
-                  controller.dispose();
-                  Navigator.of(context).pop();
-                },
+                onPressed: () => Navigator.pop(context),
                 child: const Text('Cancel'),
               ),
               ElevatedButton(
                 onPressed: () async {
                   load.notes = controller.text;
-                  await repo.save(load);
-                  controller.dispose();
-                  Navigator.of(context).pop();
+                  await load.save();
+                  Navigator.pop(context);
                 },
                 child: const Text('Save'),
               ),
@@ -133,95 +118,165 @@ class _LoadListScreenState extends State<LoadListScreen> {
     );
   }
 
+  void _toggleAlert(Load load) async {
+    load.alertShown = !load.alertShown;
+    await load.save();
+  }
+
+  void _changeColor(Load load, Color newColor) async {
+    load.color = newColor;
+    await load.save();
+  }
+
+  Future<void> _confirmAndDeleteLoad(Load load) async {
+    final shouldDelete = await showDialog<bool>(
+      context: context,
+      builder:
+          (_) => AlertDialog(
+            title: const Text('Confirm Delete'),
+            content: Text(
+              'Are you sure you want to delete truck "${load.truckNumber}"?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false), // Ne briši
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed:
+                    () => Navigator.of(context).pop(true), // Potvrdi brisanje
+                child: const Text('Delete'),
+              ),
+            ],
+          ),
+    );
+
+    if (shouldDelete == true) {
+      await load.delete();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final box = Hive.box<Load>('loads');
     return Scaffold(
-      appBar: AppBar(title: const Text('🚚 LoadPilot')),
+      appBar: AppBar(
+        title: const Text('🚚 Load Pilot'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.add),
+            tooltip: 'Add Truck',
+            onPressed: _addNewLoad,
+          ),
+        ],
+      ),
       body: ValueListenableBuilder(
         valueListenable: box.listenable(),
         builder: (_, Box<Load> b, __) {
           if (b.isEmpty) {
-            return const Center(child: Text('No loads added.'));
+            return const Center(child: Text('No trucks added.'));
           }
           return ListView.builder(
             itemCount: b.length,
             itemBuilder: (_, i) {
               final load = b.getAt(i);
               if (load == null) return const SizedBox();
-              return LoadListItem(
-                load: load,
-                onEdit: () => _onEditLoad(load),
-                onDelete: () => _onDeleteLoad(load),
-                onEditNotes: () => _onEditNotes(load),
+              return Card(
+                color: load.color.withOpacity(0.2),
+                margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: Padding(
+                  padding: const EdgeInsets.all(12.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Truck Number (bold and bigger)
+                      Text(
+                        load.truckNumber,
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+
+                      // Notes
+                      Text(
+                        'Notes: ${load.notes?.isEmpty ?? true ? "None" : load.notes}',
+                      ),
+                      const SizedBox(height: 8),
+
+                      // Alert status
+                      Text(
+                        'Alert: ${load.alertShown ? "🔔 ACTIVE" : "🔕 Inactive"}',
+                        style: TextStyle(
+                          color:
+                              load.alertShown ? Colors.red : Colors.grey[600],
+                        ),
+                      ),
+
+                      const SizedBox(height: 8),
+
+                      // Buttons Row
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          // Color selectors
+                          Row(
+                            children:
+                                statusColors.map((color) {
+                                  return GestureDetector(
+                                    onTap: () => _changeColor(load, color),
+                                    child: Container(
+                                      margin: const EdgeInsets.only(right: 6),
+                                      width: 24,
+                                      height: 24,
+                                      decoration: BoxDecoration(
+                                        color: color,
+                                        borderRadius: BorderRadius.circular(4),
+                                        border: Border.all(
+                                          color:
+                                              load.color == color
+                                                  ? Colors.black
+                                                  : Colors.transparent,
+                                          width: 2,
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                }).toList(),
+                          ),
+                          // Action buttons
+                          Row(
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.edit_note),
+                                tooltip: 'Edit Notes',
+                                onPressed: () => _editNotes(load),
+                              ),
+                              IconButton(
+                                icon: Icon(
+                                  load.alertShown
+                                      ? Icons.notifications_active
+                                      : Icons.notifications_off,
+                                ),
+                                tooltip: 'Toggle Alert',
+                                onPressed: () => _toggleAlert(load),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.delete),
+                                tooltip: 'Delete Truck',
+                                onPressed: () => _confirmAndDeleteLoad(load),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
               );
             },
           );
         },
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _onAddLoad,
-        child: const Icon(Icons.add),
-      ),
-    );
-  }
-}
-
-class LoadListItem extends StatelessWidget {
-  final Load load;
-  final VoidCallback onEdit;
-  final VoidCallback onDelete;
-  final VoidCallback onEditNotes;
-
-  const LoadListItem({
-    required this.load,
-    required this.onEdit,
-    required this.onDelete,
-    required this.onEditNotes,
-    super.key,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final remain = load.pickupTime.difference(DateTime.now());
-    final isTrackingOk = load.trackingAccepted;
-
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      color: load.alertShown ? Colors.green.withOpacity(0.1) : null,
-      child: ListTile(
-        leading: Icon(
-          isTrackingOk ? Icons.check_circle : Icons.cancel,
-          color: isTrackingOk ? Colors.green : Colors.red,
-        ),
-        title: Text('${load.driverName} → ${load.pickupLocation}'),
-        subtitle: Text(
-          '${load.pickupTime.toLocal().toString().substring(0, 16)} • '
-          '${remain.inHours}h ${remain.inMinutes.remainder(60)}m left\n'
-          'Status: ${load.status ?? "Awaiting Pickup"}\n'
-          'Notes: ${load.notes?.isEmpty ?? true ? "None" : load.notes}',
-        ),
-        isThreeLine: true,
-        trailing: Wrap(
-          spacing: 8,
-          children: [
-            IconButton(
-              icon: const Icon(Icons.note),
-              tooltip: 'Edit Notes',
-              onPressed: onEditNotes,
-            ),
-            IconButton(
-              icon: const Icon(Icons.edit),
-              tooltip: 'Edit Load',
-              onPressed: onEdit,
-            ),
-            IconButton(
-              icon: const Icon(Icons.delete),
-              tooltip: 'Delete Load',
-              onPressed: onDelete,
-            ),
-          ],
-        ),
       ),
     );
   }
