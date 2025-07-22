@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:hive/hive.dart';
 
 part 'load.g.dart';
@@ -5,33 +6,25 @@ part 'load.g.dart';
 @HiveType(typeId: 0)
 class Load extends HiveObject {
   @HiveField(0)
-  String driverName;
+  String truckNumber;
 
   @HiveField(1)
-  String pickupLocation;
+  String? notes;
 
   @HiveField(2)
-  DateTime pickupTime;
-
-  @HiveField(3)
-  String? status; // ← ovo
-
-  @HiveField(4)
-  bool trackingAccepted;
-
-  @HiveField(5)
-  String? notes; // ← ovo
-
-  @HiveField(6)
   bool alertShown;
 
+  @HiveField(3)
+  int colorValue; // Boja kao int
+
+  Color get color => Color(colorValue);
+
+  set color(Color newColor) => colorValue = newColor.value;
+
   Load({
-    required this.driverName,
-    required this.pickupLocation,
-    required this.pickupTime,
-    this.status = "Awaiting Pickup",
-    this.trackingAccepted = false,
+    required this.truckNumber,
     this.notes = '',
     this.alertShown = false,
+    this.colorValue = 0xFF4CAF50, // Default: zelena
   });
 }

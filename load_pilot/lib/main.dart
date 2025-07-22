@@ -1,38 +1,53 @@
 import 'dart:io';
-import 'package:flutter/material.dart';
-import 'package:hive_flutter/hive_flutter.dart';
-import 'package:load_pilot/services/notifications_service.dart';
-import 'models/load.dart';
-import 'screens/load_list_screen.dart';
-import 'package:window_size/window_size.dart';
 import 'dart:ui';
 
-Future<void> main() async {
+import 'package:flutter/material.dart';
+import 'package:hive_flutter/hive_flutter.dart';
+import 'package:load_pilot/layouts/master_screen.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:window_size/window_size.dart';
+
+import 'models/load.dart';
+import 'screens/load_list_screen.dart';
+import 'services/notifications_service.dart';
+
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Window size config for desktop
   if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
-    setWindowMinSize(const Size(600, 800));
+    // setWindowTitle('Load Pilot');
+    // setWindowMinSize(const Size(1000, 700));
+    // setWindowMaxSize(Size.infinite);
   }
 
-  await Hive.initFlutter();
+  // Hive setup
+  final dir = await getApplicationDocumentsDirectory();
+  Hive.init(dir.path);
+
   Hive.registerAdapter(LoadAdapter());
+  //await Hive.deleteBoxFromDisk('loads');
   await Hive.openBox<Load>('loads');
 
-  await NotificationService.init();
+  // Notifikacije
+  //await NotificationService.init();
 
-  runApp(const LoadPilotApp());
+  runApp(const MyApp());
 }
 
-class LoadPilotApp extends StatelessWidget {
-  const LoadPilotApp({super.key});
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'LoadPilot',
+      title: 'Load Pilot',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData.dark(useMaterial3: true),
-      home: const LoadListScreen(),
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blueAccent),
+        useMaterial3: true,
+      ),
+      home: const MasterScreen(),
     );
   }
 }

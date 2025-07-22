@@ -34,7 +34,7 @@ class NotificationService {
     await _notifications.show(
       load.key.hashCode,
       'Pickup coming up!',
-      'Driver ${load.driverName} has pickup at ${load.pickupLocation} in < 1 h.',
+      'Driver ${load.truckNumber} has pickup at ${load.truckNumber} in < 1 h.',
       NotificationDetails(android: android),
     );
   }
