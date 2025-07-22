@@ -175,11 +175,19 @@ class _LoadListScreenState extends State<LoadListScreen> {
           if (b.isEmpty) {
             return const Center(child: Text('No trucks added.'));
           }
+
+          // Izvući sve loadove i sortirati ih numerički po truckNumber
+          final loads = b.values.toList();
+          loads.sort((a, b) {
+            final aNum = int.tryParse(a.truckNumber) ?? 0;
+            final bNum = int.tryParse(b.truckNumber) ?? 0;
+            return aNum.compareTo(bNum);
+          });
+
           return ListView.builder(
-            itemCount: b.length,
+            itemCount: loads.length,
             itemBuilder: (_, i) {
-              final load = b.getAt(i);
-              if (load == null) return const SizedBox();
+              final load = loads[i];
               return Card(
                 color: load.color.withOpacity(0.2),
                 margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -188,7 +196,6 @@ class _LoadListScreenState extends State<LoadListScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Truck Number (bold and bigger)
                       Text(
                         load.truckNumber,
                         style: const TextStyle(
@@ -197,14 +204,10 @@ class _LoadListScreenState extends State<LoadListScreen> {
                         ),
                       ),
                       const SizedBox(height: 8),
-
-                      // Notes
                       Text(
                         'Notes: ${load.notes?.isEmpty ?? true ? "None" : load.notes}',
                       ),
                       const SizedBox(height: 8),
-
-                      // Alert status
                       Text(
                         'Alert: ${load.alertShown ? "🔔 ACTIVE" : "🔕 Inactive"}',
                         style: TextStyle(
@@ -212,14 +215,10 @@ class _LoadListScreenState extends State<LoadListScreen> {
                               load.alertShown ? Colors.red : Colors.grey[600],
                         ),
                       ),
-
                       const SizedBox(height: 8),
-
-                      // Buttons Row
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          // Color selectors
                           Row(
                             children:
                                 statusColors.map((color) {
@@ -244,7 +243,6 @@ class _LoadListScreenState extends State<LoadListScreen> {
                                   );
                                 }).toList(),
                           ),
-                          // Action buttons
                           Row(
                             children: [
                               IconButton(
